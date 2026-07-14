@@ -9,6 +9,8 @@
  * endpoint, js-tiktoken) for that.
  */
 
+import type { ProcessedSpec } from './catalog'
+
 export type TokenCounter = (text: string) => number
 
 /** ~4 characters per token, rounded up. Dependency-free; an estimate, not exact. */
@@ -38,10 +40,6 @@ interface Operation {
 	description?: string
 	parameters?: Array<{ name?: string; required?: boolean; schema?: unknown }>
 	requestBody?: { required?: boolean; content?: Record<string, { schema?: unknown }> }
-}
-
-interface ProcessedSpecLike {
-	paths: Record<string, Record<string, unknown>>
 }
 
 /** Turn a path + method into a tool name, e.g. get /widgets/{id} -> get_widgets_id. */
@@ -85,7 +83,7 @@ function nativeSchema(op: Operation, minimal: boolean): unknown {
  * schemas (the ~5x-smaller variant); the default includes full schemas.
  */
 export function nativeToolsFromSpec(
-	spec: ProcessedSpecLike,
+	spec: ProcessedSpec,
 	options?: { minimal?: boolean }
 ): ToolShape[] {
 	const minimal = options?.minimal ?? false
@@ -120,7 +118,7 @@ export interface FootprintComparison {
 /** Compare the code-mode tool footprint against the native baseline for a spec. */
 export function compareFootprint(
 	codeModeTools: ToolShape[],
-	spec: ProcessedSpecLike,
+	spec: ProcessedSpec,
 	options?: { minimal?: boolean; count?: TokenCounter }
 ): FootprintComparison {
 	const count = options?.count ?? estimateTokens
