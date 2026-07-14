@@ -2,7 +2,24 @@
 
 Expose any API to an LLM agent as two sandboxed MCP tools (search + execute) on Cloudflare Workers.
 
-Instead of registering thousands of tool schemas, you register **two tools** (`search` + `execute`). The catalog stays server side; the agent writes JavaScript that runs in disposable dynamic-worker isolates. Same pattern as [cloudflare-mcp](https://github.com/cloudflare/cloudflare-mcp) (2,500 endpoints in ~1,100 tokens), packaged for any API.
+[![npm version](https://img.shields.io/npm/v/codemode-workers)](https://www.npmjs.com/package/codemode-workers)
+[![npm downloads](https://img.shields.io/npm/dm/codemode-workers)](https://www.npmjs.com/package/codemode-workers)
+[![types included](https://img.shields.io/npm/types/codemode-workers)](https://www.npmjs.com/package/codemode-workers)
+[![license MIT](https://img.shields.io/npm/l/codemode-workers)](./LICENSE)
+
+Instead of registering thousands of tool schemas, you register **two tools** (`search` + `execute`). The catalog stays server side; the agent writes JavaScript that runs in disposable dynamic-worker isolates. Same pattern as [cloudflare-mcp](https://github.com/cloudflare/mcp) (2,500 endpoints in ~1,100 tokens), packaged for any API.
+
+## Why
+
+One tool per endpoint dumps every schema into the model's context. Code mode keeps the spec on the server and sends the agent two tools, so the context cost stays flat no matter how big the API is. Measured against the Urantia Papers API (58 endpoints):
+
+| Approach                               | Tools | Tokens |
+| -------------------------------------- | ----- | ------ |
+| One tool per endpoint, full schemas    | 58    | 3,489  |
+| One tool per endpoint, minimal schemas | 58    | 1,747  |
+| Code mode                              | 2     | 184    |
+
+Run `bun run eval:tokens <specUrl>` to measure it for your own API.
 
 ## How it works
 
@@ -128,3 +145,11 @@ bun run build    # emit dist/
 ```
 
 Tests run in workerd through `@cloudflare/vitest-pool-workers`; bun is the package manager and script runner, vitest stays the test runner.
+
+## Contributing
+
+Issues and pull requests are welcome. Run `bun run check` (typecheck plus tests) before opening a PR, and `bun run format` to match the code style. The suite runs in workerd, so a Worker Loader environment gets exercised locally.
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
