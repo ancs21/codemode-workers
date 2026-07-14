@@ -66,11 +66,7 @@ function apiPrelude(baseUrl: string): string {
 }
 
 function toolResult(value: unknown, maxTokens?: number) {
-	return {
-		content: [
-			{ type: 'text' as const, text: truncateResponse(value, maxTokens ? { maxTokens } : undefined) }
-		]
-	}
+	return { content: [{ type: 'text' as const, text: truncateResponse(value, { maxTokens }) }] }
 }
 
 function toolError(error: unknown) {
@@ -81,6 +77,15 @@ function toolError(error: unknown) {
 const CODE_INPUT = z.object({
 	code: z.string().describe('JavaScript async arrow function to run')
 })
+
+/** Run an isolate call and shape it as an MCP tool result, or a tool error. */
+async function runTool(run: () => Promise<unknown>, maxTokens?: number) {
+	try {
+		return toolResult(await run(), maxTokens)
+	} catch (error) {
+		return toolError(error)
+	}
+}
 
 /**
  * Register Code Mode tools on an MCP server: `search` (read-only code over the
@@ -99,18 +104,16 @@ export function registerCodemodeTools(server: ToolRegistrar, config: CodemodeCon
 			inputSchema: CODE_INPUT,
 			annotations: { title: 'API Catalog Search', readOnlyHint: true }
 		},
-		async ({ code }) => {
-			try {
-				const result = await runInIsolate(loader, {
-					code,
-					globals: { [globalName]: await catalog.get() },
-					idPrefix: 'codemode-search'
-				})
-				return toolResult(result, maxResponseTokens)
-			} catch (error) {
-				return toolError(error)
-			}
-		}
+		({ code }) =>
+			runTool(
+				async () =>
+					runInIsolate(loader, {
+						code,
+						globals: { [globalName]: await catalog.get() },
+						idPrefix: 'codemode-search'
+					}),
+				maxResponseTokens
+			)
 	)
 
 	server.registerTool(
@@ -121,19 +124,17 @@ export function registerCodemodeTools(server: ToolRegistrar, config: CodemodeCon
 			inputSchema: CODE_INPUT,
 			annotations: { title: 'API Code Executor' }
 		},
-		async ({ code }) => {
-			try {
-				const result = await runInIsolate(loader, {
-					code,
-					prelude: apiPrelude(api.baseUrl),
-					globals: api.globals,
-					outbound: api.outbound(),
-					idPrefix: 'codemode-execute'
-				})
-				return toolResult(result, maxResponseTokens)
-			} catch (error) {
-				return toolError(error)
-			}
-		}
+		({ code }) =>
+			runTool(
+				() =>
+					runInIsolate(loader, {
+						code,
+						prelude: apiPrelude(api.baseUrl),
+						globals: api.globals,
+						outbound: api.outbound(),
+						idPrefix: 'codemode-execute'
+					}),
+				maxResponseTokens
+			)
 	)
 }
