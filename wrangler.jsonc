@@ -1,0 +1,8 @@
+{
+	// Test-only worker config: gives vitest-pool-workers a main module,
+	// the LOADER binding for dynamic isolates, and (later) the Gate entrypoint.
+	"name": "mcp-codemode-test",
+	"main": "tests/fixture/worker.ts",
+	"compatibility_date": "2026-01-12",
+	"worker_loaders": [{ "binding": "LOADER" }]
+}
