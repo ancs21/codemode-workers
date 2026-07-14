@@ -12,6 +12,12 @@
  *
  * wrangler.jsonc (alongside) provides the LOADER binding and a self-service
  * binding so `exports.Gate` resolves as the execute isolate's outbound.
+ *
+ * SECURITY: this /mcp endpoint is UNAUTHENTICATED. That is fine for the public,
+ * read-only Urantia endpoints. But if you set URANTIA_TOKEN, or deploy this
+ * publicly, you MUST put auth in front (OAuth or a bearer check) first —
+ * otherwise any caller can invoke /me/* as your token's user (confused deputy)
+ * and run unbounded code. See the reference cloudflare-mcp for the OAuth setup.
  */
 import { exports } from 'cloudflare:workers'
 import { McpServer, WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server'
@@ -65,7 +71,9 @@ function buildServer(env: Env): McpServer {
 						: {}
 				}),
 			description: 'Urantia Papers API v1. Most endpoints are public; /me/* needs a bearer token.'
-		}
+		},
+		// Bound agent execution so a runaway `while(true)` can't hang the endpoint.
+		timeoutMs: 10_000
 	})
 	return server
 }
