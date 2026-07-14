@@ -60,13 +60,15 @@ Three invariants, all integration-tested against real isolates:
 
 ## Requirements
 
-Cloudflare Workers with the Worker Loader binding (`worker_loaders`), currently in beta. Node 22+, TypeScript 7.
+Cloudflare Workers with the Worker Loader binding (`worker_loaders`), currently in beta. Bun 1.3+, TypeScript 7.
 
 ## Develop
 
 ```
-npm install
-npm test        # vitest via @cloudflare/vitest-pool-workers (real isolates)
-npm run check   # typecheck + tests
-npm run build   # emit dist/
+bun install
+bun run test     # vitest via @cloudflare/vitest-pool-workers (real isolates)
+bun run check    # typecheck + tests
+bun run build    # emit dist/
 ```
+
+Tests run in workerd through `@cloudflare/vitest-pool-workers`; bun is the package manager and script runner, vitest stays the test runner.
