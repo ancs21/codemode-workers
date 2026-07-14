@@ -2,7 +2,7 @@ export { processSpec, resolveRefs, type ProcessedSpec } from './catalog'
 export { truncateResponse, type TruncateOptions } from './truncate'
 export { buildModuleSource, type ModuleSourceOptions } from './module-source'
 export { runInIsolate, type RunOptions, type WorkerLoaderLike } from './isolate'
-export { createGate, checkHost, type GateConfig, type GateProps } from './gate'
+export { createGate, checkHost, isSecureScheme, type GateConfig, type GateProps } from './gate'
 export {
 	registerCodemodeTools,
 	type CodemodeConfig,

@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { checkHost } from '../src/gate'
+import { checkHost, isSecureScheme } from '../src/gate'
 import { gateCalls } from './fixture/worker'
 
 /** POST agent code to the fixture worker, which runs it in a gated isolate. */
@@ -27,6 +27,17 @@ describe('checkHost', () => {
 	})
 })
 
+describe('isSecureScheme', () => {
+	it('accepts https', () => {
+		expect(isSecureScheme('https://api.fake.test/x')).toBe(true)
+	})
+
+	it('rejects http and other schemes', () => {
+		expect(isSecureScheme('http://api.fake.test/x')).toBe(false)
+		expect(isSecureScheme('ws://api.fake.test/x')).toBe(false)
+	})
+})
+
 describe('gate (real isolate egress)', () => {
 	it('injects auth headers outside the isolate', async () => {
 		const { result } = await runGated(
@@ -45,6 +56,15 @@ describe('gate (real isolate egress)', () => {
 		// A 3xx therefore returns un-followed to the isolate; the isolate cannot
 		// follow it without re-entering the gate, which re-runs the host check.
 		expect(gateCalls[0]?.redirect).toBe('manual')
+	})
+
+	it('refuses to attach credentials over http, even to an allowed host', async () => {
+		const { result } = await runGated(
+			'async () => (await fetch("http://api.fake.test/v1/me")).status',
+			'secret-token-http'
+		)
+		expect(result).toBe(403)
+		expect(gateCalls).toHaveLength(0)
 	})
 
 	it('rejects non-allowlisted hosts with 403 before any upstream call', async () => {

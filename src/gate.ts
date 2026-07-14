@@ -18,6 +18,15 @@ export function checkHost(url: string, allowedHosts: string[]): boolean {
 	return allowedHosts.includes(new URL(url).hostname)
 }
 
+/**
+ * True when the URL is safe to attach injected credentials to. Requires https
+ * so the credential never rides a plaintext connection. `data:`/`file:`/`blob:`
+ * already fail the host check (empty hostname); this closes the `http:` gap.
+ */
+export function isSecureScheme(url: string): boolean {
+	return new URL(url).protocol === 'https:'
+}
+
 /** Constructor shape of a gate class (nameable in declaration output). */
 export type GateClass = new (
 	...args: ConstructorParameters<typeof WorkerEntrypoint>
@@ -40,6 +49,13 @@ export function createGate(config: GateConfig): GateClass {
 			if (!checkHost(request.url, allowedHosts)) {
 				const { hostname } = new URL(request.url)
 				return new Response(`Forbidden: requests to ${hostname} are not allowed`, { status: 403 })
+			}
+
+			if (!isSecureScheme(request.url)) {
+				const { protocol } = new URL(request.url)
+				return new Response(`Forbidden: refusing to attach credentials over ${protocol}`, {
+					status: 403
+				})
 			}
 
 			const props = (this.ctx as unknown as { props?: GateProps }).props
