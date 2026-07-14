@@ -52,11 +52,19 @@ registerCodemodeTools(server, {
 
 ## Security model
 
-Three invariants, all integration-tested against real isolates:
+Invariants, all integration-tested against real isolates:
 
 1. Fresh isolate per call. No state crosses calls; code is compiled, never `eval`'d.
-2. `search` isolates have `globalOutbound: null` — no network, ever.
-3. Credentials live in the gate's props, outside the sandbox. The gate 403s any non-allowlisted host before the request leaves.
+2. `search` isolates have `globalOutbound: null`: no network, ever.
+3. Credentials live in the gate's props, outside the sandbox. Agent code cannot read the token (verified) or the `env`/`props`.
+4. The gate 403s any non-allowlisted host before the request leaves, refuses to attach credentials over a non-https scheme, and forwards with `redirect: 'manual'` so a 3xx never carries the credential to another host.
+
+### Residual risks (know these before you ship)
+
+- **Host allowlist is by hostname, not host:port** (matching the cloudflare-mcp pattern). If the allowlisted host also serves other things on other ports, agent code can reach them with the credential attached. Pin the port yourself (pass `host:port` and match `url.host`) if that matters for your API.
+- **A leaked credential is recoverable if the allowlisted API reflects request headers** (debug/echo endpoints, verbose error bodies that quote the auth header). This is inherent to any credential-injecting proxy. Confirm your API has no header-reflecting surface, and scope the injected token to least privilege.
+- **`api.request` returns upstream error bodies to the agent.** By design (the agent needs to see what failed), but it means anything the upstream reflects on error is agent-readable.
+- **Execution timeout is opt-in** (`timeoutMs`). Without it, the platform CPU limit is the only backstop against long-running agent code. Set MCP-level rate limiting at the operator layer.
 
 ## Requirements
 
