@@ -4,44 +4,48 @@ import { truncateResponse } from './truncate'
 
 /** Structural slice of an MCP server — works with any SDK exposing registerTool. */
 export interface ToolRegistrar {
-	registerTool(name: string, config: RegisteredTool, callback: (args: { code: string }) => unknown): unknown
+  registerTool(
+    name: string,
+    config: RegisteredTool,
+    callback: (args: { code: string }) => unknown,
+  ): unknown
 }
 
 export interface RegisteredTool {
-	title: string
-	description: string
-	inputSchema: unknown
-	annotations: { title: string; readOnlyHint?: boolean }
+  title: string
+  description: string
+  inputSchema: unknown
+  annotations: { title: string; readOnlyHint?: boolean }
 }
 
 export interface CodemodeConfig {
-	loader: WorkerLoaderLike
-	catalog: {
-		/** The catalog object baked into every search isolate. */
-		get: () => unknown | Promise<unknown>
-		/** Global name the code sees. Default: 'spec'. */
-		globalName?: string
-		/** Appended to the search tool description (shape docs, examples). */
-		description?: string
-	}
-	api: {
-		/** Base URL prepended to api.request paths, e.g. https://api.example.com/v4 */
-		baseUrl: string
-		/** Factory for the gate outbound, called per execute invocation (e.g. () => exports.Gate({ props })). */
-		outbound: () => unknown
-		/** Appended to the execute tool description. */
-		description?: string
-		/** Extra values baked into execute isolates (e.g. { accountId }). */
-		globals?: Record<string, unknown>
-	}
-	maxResponseTokens?: number
-	/** Bound each tool call's isolate execution (ms). Default: no timeout. */
-	timeoutMs?: number
+  loader: WorkerLoaderLike
+  catalog: {
+    /** The catalog object baked into every search isolate. */
+    get: () => unknown | Promise<unknown>
+    /** Global name the code sees. Default: 'spec'. */
+    globalName?: string
+    /** Appended to the search tool description (shape docs, examples). */
+    description?: string
+  }
+  api: {
+    /** Base URL prepended to api.request paths, e.g. https://api.example.com/v4 */
+    baseUrl: string
+    /** Factory for the gate outbound, called per execute invocation (e.g. () => exports.Gate({ props })). */
+    outbound: () => unknown
+    /** Appended to the execute tool description. */
+    description?: string
+    /** Extra values baked into execute isolates (e.g. { accountId }). */
+    globals?: Record<string, unknown>
+  }
+  maxResponseTokens?: number
+  /** Bound each tool call's isolate execution (ms). Default: no timeout. */
+  timeoutMs?: number
 }
 
 /** The api.request() helper compiled into every execute isolate. */
 function apiPrelude(baseUrl: string): string {
-	return `const api = {
+  return `const api = {
 	async request({ method, path, query, body, contentType, rawBody }) {
 		const url = new URL(${JSON.stringify(baseUrl)} + path);
 		if (query) {
@@ -68,25 +72,32 @@ function apiPrelude(baseUrl: string): string {
 }
 
 function toolResult(value: unknown, maxTokens?: number) {
-	return { content: [{ type: 'text' as const, text: truncateResponse(value, { maxTokens }) }] }
+  return {
+    content: [
+      { type: 'text' as const, text: truncateResponse(value, { maxTokens }) },
+    ],
+  }
 }
 
 function toolError(error: unknown) {
-	const message = error instanceof Error ? error.message : String(error)
-	return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true as const }
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    content: [{ type: 'text' as const, text: `Error: ${message}` }],
+    isError: true as const,
+  }
 }
 
 const CODE_INPUT = z.object({
-	code: z.string().describe('JavaScript async arrow function to run')
+  code: z.string().describe('JavaScript async arrow function to run'),
 })
 
 /** Run an isolate call and shape it as an MCP tool result, or a tool error. */
 async function runTool(run: () => Promise<unknown>, maxTokens?: number) {
-	try {
-		return toolResult(await run(), maxTokens)
-	} catch (error) {
-		return toolError(error)
-	}
+  try {
+    return toolResult(await run(), maxTokens)
+  } catch (error) {
+    return toolError(error)
+  }
 }
 
 /**
@@ -94,51 +105,54 @@ async function runTool(run: () => Promise<unknown>, maxTokens?: number) {
  * catalog, no network) and `execute` (code calling api.request() through the
  * credential-injecting gate).
  */
-export function registerCodemodeTools(server: ToolRegistrar, config: CodemodeConfig): void {
-	const { loader, catalog, api, maxResponseTokens, timeoutMs } = config
-	const globalName = catalog.globalName ?? 'spec'
+export function registerCodemodeTools(
+  server: ToolRegistrar,
+  config: CodemodeConfig,
+): void {
+  const { loader, catalog, api, maxResponseTokens, timeoutMs } = config
+  const globalName = catalog.globalName ?? 'spec'
 
-	server.registerTool(
-		'search',
-		{
-			title: 'API Catalog Search',
-			description: `Search the API catalog. Write an async arrow function over the \`${globalName}\` global and return what you find. No network access.\n\n${catalog.description ?? ''}\n\nExample:\nasync () => Object.entries(${globalName}.paths).filter(([p]) => p.includes("widget"))`,
-			inputSchema: CODE_INPUT,
-			annotations: { title: 'API Catalog Search', readOnlyHint: true }
-		},
-		({ code }) =>
-			runTool(
-				async () =>
-					runInIsolate(loader, {
-						code,
-						globals: { [globalName]: await catalog.get() },
-						idPrefix: 'codemode-search',
-						timeoutMs
-					}),
-				maxResponseTokens
-			)
-	)
+  server.registerTool(
+    'search',
+    {
+      title: 'API Catalog Search',
+      description: `Search the API catalog. Write an async arrow function over the \`${globalName}\` global and return what you find. No network access.\n\n${catalog.description ?? ''}\n\nExample:\nasync () => Object.entries(${globalName}.paths).filter(([p]) => p.includes("widget"))`,
+      inputSchema: CODE_INPUT,
+      annotations: { title: 'API Catalog Search', readOnlyHint: true },
+    },
+    ({ code }) =>
+      runTool(
+        async () =>
+          runInIsolate(loader, {
+            code,
+            globals: { [globalName]: await catalog.get() },
+            idPrefix: 'codemode-search',
+            timeoutMs,
+          }),
+        maxResponseTokens,
+      ),
+  )
 
-	server.registerTool(
-		'execute',
-		{
-			title: 'API Code Executor',
-			description: `Execute JavaScript against the API. Use the search tool first to find endpoints, then call api.request({ method, path, query, body, contentType, rawBody }).\n\n${api.description ?? ''}\n\nExample:\nasync () => api.request({ method: "GET", path: "/v1/things" })`,
-			inputSchema: CODE_INPUT,
-			annotations: { title: 'API Code Executor' }
-		},
-		({ code }) =>
-			runTool(
-				() =>
-					runInIsolate(loader, {
-						code,
-						prelude: apiPrelude(api.baseUrl),
-						globals: api.globals,
-						outbound: api.outbound(),
-						idPrefix: 'codemode-execute',
-						timeoutMs
-					}),
-				maxResponseTokens
-			)
-	)
+  server.registerTool(
+    'execute',
+    {
+      title: 'API Code Executor',
+      description: `Execute JavaScript against the API. Use the search tool first to find endpoints, then call api.request({ method, path, query, body, contentType, rawBody }).\n\n${api.description ?? ''}\n\nExample:\nasync () => api.request({ method: "GET", path: "/v1/things" })`,
+      inputSchema: CODE_INPUT,
+      annotations: { title: 'API Code Executor' },
+    },
+    ({ code }) =>
+      runTool(
+        () =>
+          runInIsolate(loader, {
+            code,
+            prelude: apiPrelude(api.baseUrl),
+            globals: api.globals,
+            outbound: api.outbound(),
+            idPrefix: 'codemode-execute',
+            timeoutMs,
+          }),
+        maxResponseTokens,
+      ),
+  )
 }

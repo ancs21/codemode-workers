@@ -5,52 +5,53 @@ const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const
  * Circular references become `{ $circular: <ref> }` markers.
  */
 export function resolveRefs(
-	value: unknown,
-	spec: Record<string, unknown>,
-	seen = new Set<string>()
+  value: unknown,
+  spec: Record<string, unknown>,
+  seen = new Set<string>(),
 ): unknown {
-	if (value === null || typeof value !== 'object') return value
-	if (Array.isArray(value)) return value.map((item) => resolveRefs(item, spec, seen))
+  if (value === null || typeof value !== 'object') return value
+  if (Array.isArray(value))
+    return value.map((item) => resolveRefs(item, spec, seen))
 
-	const record = value as Record<string, unknown>
+  const record = value as Record<string, unknown>
 
-	if (typeof record.$ref === 'string') {
-		const ref = record.$ref
-		// `seen` is the current resolution path, not a global visited set: a ref
-		// is circular only when it appears in its own ancestry. Add before
-		// descending and remove after, so the same ref reached via sibling
-		// branches resolves each time instead of being flagged circular.
-		if (seen.has(ref)) return { $circular: ref }
+  if (typeof record.$ref === 'string') {
+    const ref = record.$ref
+    // `seen` is the current resolution path, not a global visited set: a ref
+    // is circular only when it appears in its own ancestry. Add before
+    // descending and remove after, so the same ref reached via sibling
+    // branches resolves each time instead of being flagged circular.
+    if (seen.has(ref)) return { $circular: ref }
 
-		let resolved: unknown = spec
-		for (const part of ref.replace('#/', '').split('/')) {
-			resolved = (resolved as Record<string, unknown> | undefined)?.[part]
-		}
+    let resolved: unknown = spec
+    for (const part of ref.replace('#/', '').split('/')) {
+      resolved = (resolved as Record<string, unknown> | undefined)?.[part]
+    }
 
-		seen.add(ref)
-		const result = resolveRefs(resolved, spec, seen)
-		seen.delete(ref)
-		return result
-	}
+    seen.add(ref)
+    const result = resolveRefs(resolved, spec, seen)
+    seen.delete(ref)
+    return result
+  }
 
-	const result: Record<string, unknown> = {}
-	for (const [key, entry] of Object.entries(record)) {
-		result[key] = resolveRefs(entry, spec, seen)
-	}
-	return result
+  const result: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(record)) {
+    result[key] = resolveRefs(entry, spec, seen)
+  }
+  return result
 }
 
 interface OperationObject {
-	summary?: string
-	description?: string
-	tags?: string[]
-	parameters?: unknown
-	requestBody?: unknown
-	responses?: unknown
+  summary?: string
+  description?: string
+  tags?: string[]
+  parameters?: unknown
+  requestBody?: unknown
+  responses?: unknown
 }
 
 export interface ProcessedSpec {
-	paths: Record<string, Record<string, unknown>>
+  paths: Record<string, Record<string, unknown>>
 }
 
 /**
@@ -59,26 +60,29 @@ export interface ProcessedSpec {
  * an endpoint, with all $refs resolved inline.
  */
 export function processSpec(spec: Record<string, unknown>): ProcessedSpec {
-	const rawPaths = (spec.paths ?? {}) as Record<string, Record<string, OperationObject>>
-	const paths: ProcessedSpec['paths'] = {}
+  const rawPaths = (spec.paths ?? {}) as Record<
+    string,
+    Record<string, OperationObject>
+  >
+  const paths: ProcessedSpec['paths'] = {}
 
-	for (const [path, pathItem] of Object.entries(rawPaths)) {
-		if (!pathItem) continue
-		paths[path] = {}
+  for (const [path, pathItem] of Object.entries(rawPaths)) {
+    if (!pathItem) continue
+    paths[path] = {}
 
-		for (const method of HTTP_METHODS) {
-			const op = pathItem[method]
-			if (!op) continue
-			paths[path][method] = {
-				summary: op.summary,
-				description: op.description,
-				tags: op.tags,
-				parameters: resolveRefs(op.parameters, spec),
-				requestBody: resolveRefs(op.requestBody, spec),
-				responses: resolveRefs(op.responses, spec)
-			}
-		}
-	}
+    for (const method of HTTP_METHODS) {
+      const op = pathItem[method]
+      if (!op) continue
+      paths[path][method] = {
+        summary: op.summary,
+        description: op.description,
+        tags: op.tags,
+        parameters: resolveRefs(op.parameters, spec),
+        requestBody: resolveRefs(op.requestBody, spec),
+        responses: resolveRefs(op.responses, spec),
+      }
+    }
+  }
 
-	return { paths }
+  return { paths }
 }

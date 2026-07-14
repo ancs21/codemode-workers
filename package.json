@@ -1,6 +1,6 @@
 {
   "name": "codemode-workers",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Generic Code Mode MCP toolkit: expose huge API surfaces to agents as two tools (search + execute) running in Cloudflare dynamic Worker isolates",
   "type": "module",
   "main": "dist/index.js",
@@ -39,7 +39,9 @@
     "check": "npm run typecheck && npm run test",
     "eval:tokens": "bun run scripts/eval-tokens.ts",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run typecheck"
+    "prepublishOnly": "npm run typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "zod": "^4.3.5"
@@ -48,6 +50,7 @@
     "@cloudflare/vitest-pool-workers": "^0.16.18",
     "@cloudflare/workers-types": "^4.20260625.1",
     "@modelcontextprotocol/server": "2.0.0-beta.2",
+    "prettier": "^3.9.5",
     "typescript": "^7.0.2",
     "vitest": "^4.1.0",
     "wrangler": "4.105.0"

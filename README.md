@@ -20,13 +20,23 @@ Bring your own MCP server SDK (e.g. `@modelcontextprotocol/server`); this librar
 // wrangler.jsonc
 {
   "worker_loaders": [{ "binding": "LOADER" }],
-  "services": [{ "binding": "GATE_SELF", "service": "<your-worker>", "entrypoint": "Gate" }]
+  "services": [
+    {
+      "binding": "GATE_SELF",
+      "service": "<your-worker>",
+      "entrypoint": "Gate",
+    },
+  ],
 }
 ```
 
 ```ts
 import { exports } from 'cloudflare:workers'
-import { createGate, processSpec, registerCodemodeTools } from 'codemode-workers'
+import {
+  createGate,
+  processSpec,
+  registerCodemodeTools,
+} from 'codemode-workers'
 
 export const Gate = createGate({ allowedHosts: ['api.example.com'] })
 
@@ -34,12 +44,15 @@ registerCodemodeTools(server, {
   loader: env.LOADER,
   catalog: {
     get: async () => processSpec(await (await fetch(SPEC_URL)).json()),
-    description: 'Your API catalog: spec.paths[path][method].'
+    description: 'Your API catalog: spec.paths[path][method].',
   },
   api: {
     baseUrl: 'https://api.example.com/v1',
-    outbound: () => exports.Gate({ props: { headers: { Authorization: `Bearer ${env.API_TOKEN}` } } })
-  }
+    outbound: () =>
+      exports.Gate({
+        props: { headers: { Authorization: `Bearer ${env.API_TOKEN}` } },
+      }),
+  },
 })
 ```
 
@@ -47,14 +60,14 @@ registerCodemodeTools(server, {
 
 ## API
 
-| Export | What it does |
-| --- | --- |
-| `registerCodemodeTools(server, config)` | Registers `search` + `execute` on an MCP server |
-| `createGate({ allowedHosts, fetcher? })` | Egress gate class: host allowlist + header injection from props |
-| `runInIsolate(loader, { code, globals, prelude, outbound })` | Run agent code in a fresh isolate (network off by default) |
-| `processSpec(spec)` / `resolveRefs(value, spec)` | Reduce an OpenAPI spec to a searchable catalog, refs inlined |
-| `buildModuleSource(options)` | The module-text builder underneath `runInIsolate` |
-| `truncateResponse(value, { maxTokens })` | Token-budget clamp used on all tool results |
+| Export                                                       | What it does                                                    |
+| ------------------------------------------------------------ | --------------------------------------------------------------- |
+| `registerCodemodeTools(server, config)`                      | Registers `search` + `execute` on an MCP server                 |
+| `createGate({ allowedHosts, fetcher? })`                     | Egress gate class: host allowlist + header injection from props |
+| `runInIsolate(loader, { code, globals, prelude, outbound })` | Run agent code in a fresh isolate (network off by default)      |
+| `processSpec(spec)` / `resolveRefs(value, spec)`             | Reduce an OpenAPI spec to a searchable catalog, refs inlined    |
+| `buildModuleSource(options)`                                 | The module-text builder underneath `runInIsolate`               |
+| `truncateResponse(value, { maxTokens })`                     | Token-budget clamp used on all tool results                     |
 
 ## Security model
 
@@ -80,7 +93,10 @@ The whole point of code mode is token efficiency, so the library ships a way to 
 import { compareFootprint, processSpec } from 'codemode-workers'
 
 const spec = processSpec(await (await fetch(SPEC_URL)).json())
-const { codeModeTokens, nativeTokens, endpointCount, ratio } = compareFootprint(myTools, spec)
+const { codeModeTokens, nativeTokens, endpointCount, ratio } = compareFootprint(
+  myTools,
+  spec,
+)
 ```
 
 `bun run eval:tokens [specUrl]` prints the table for any spec. Against the Urantia Papers API:
