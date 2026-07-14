@@ -3,13 +3,23 @@
     "target": "esnext",
     "module": "esnext",
     "moduleResolution": "bundler",
-    "lib": ["esnext"],
-    "types": ["@cloudflare/workers-types", "vitest/globals", "@cloudflare/vitest-pool-workers/types"],
+    "lib": [
+      "esnext"
+    ],
+    "types": [
+      "@cloudflare/workers-types",
+      "vitest/globals",
+      "@cloudflare/vitest-pool-workers/types"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "tests"]
+  "include": [
+    "src",
+    "tests",
+    "examples"
+  ]
 }

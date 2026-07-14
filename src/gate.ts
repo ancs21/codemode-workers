@@ -18,6 +18,11 @@ export function checkHost(url: string, allowedHosts: string[]): boolean {
 	return allowedHosts.includes(new URL(url).hostname)
 }
 
+/** Constructor shape of a gate class (nameable in declaration output). */
+export type GateClass = new (
+	...args: ConstructorParameters<typeof WorkerEntrypoint>
+) => WorkerEntrypoint & { fetch(request: Request): Promise<Response> }
+
 /**
  * Create the egress gate for `execute` isolates: a WorkerEntrypoint class the
  * consumer re-exports from their worker entry module and passes to
@@ -27,10 +32,10 @@ export function checkHost(url: string, allowedHosts: string[]): boolean {
  * allowlists the host and injects credential headers from props — so agent
  * code can neither read the secret nor reach any other host.
  */
-export function createGate(config: GateConfig) {
+export function createGate(config: GateConfig): GateClass {
 	const { allowedHosts, fetcher = (request: Request) => fetch(request) } = config
 
-	return class Gate extends WorkerEntrypoint {
+	const Gate = class extends WorkerEntrypoint {
 		override async fetch(request: Request): Promise<Response> {
 			if (!checkHost(request.url, allowedHosts)) {
 				const { hostname } = new URL(request.url)
@@ -45,4 +50,5 @@ export function createGate(config: GateConfig) {
 			return fetcher(new Request(request, { headers }))
 		}
 	}
+	return Gate as unknown as GateClass
 }
