@@ -66,6 +66,30 @@ Invariants, all integration-tested against real isolates:
 - **`api.request` returns upstream error bodies to the agent.** By design (the agent needs to see what failed), but it means anything the upstream reflects on error is agent-readable.
 - **Execution timeout is opt-in** (`timeoutMs`). Without it, the platform CPU limit is the only backstop against long-running agent code. Set MCP-level rate limiting at the operator layer.
 
+## Evals
+
+The whole point of code mode is token efficiency, so the library ships a way to measure it. `compareFootprint` weighs the code-mode tool set against the one-tool-per-endpoint baseline generated from the same spec:
+
+```ts
+import { compareFootprint, processSpec } from 'mcp-codemode'
+
+const spec = processSpec(await (await fetch(SPEC_URL)).json())
+const { codeModeTokens, nativeTokens, endpointCount, ratio } = compareFootprint(myTools, spec)
+```
+
+`bun run eval:tokens [specUrl]` prints the table for any spec. Against the Urantia Papers API:
+
+```
+Endpoints: 58
+Code mode (2 tools):     184 tokens
+Native, full schemas:    3,489 tokens   (19x more)
+Native, minimal schemas: 1,747 tokens   (9x more)
+```
+
+Token counts default to a dependency-free `chars/4` estimate. That is accurate enough for the ratio and for a CI regression guard (see `tests/eval-regression.test.ts`, which fails if a description bloats or the ratio collapses), but not for a headline absolute number: pass Anthropic's `count_tokens` (or `js-tiktoken`) as the `count` argument to get the exact model-facing figure.
+
+This is the deterministic, no-API-key half of evals. The other half — does a real model actually find the right endpoint through `search` — needs a model in the loop, your API keys, and money, so it is left to you. The clean way to score it is not an LLM judge: run the model's generated code through the same gate spy the tests use and assert the resulting request, exactly like `tests/gate.test.ts` and `tests/tools.test.ts` already do deterministically.
+
 ## Requirements
 
 Cloudflare Workers with the Worker Loader binding (`worker_loaders`), currently in beta. Bun 1.3+, TypeScript 7.

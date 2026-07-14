@@ -19,7 +19,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc -p tsconfig.build.json",
-    "check": "npm run typecheck && npm run test"
+    "check": "npm run typecheck && npm run test",
+    "eval:tokens": "bun run scripts/eval-tokens.ts"
   },
   "dependencies": {
     "zod": "^4.3.5"
