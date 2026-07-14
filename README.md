@@ -1,6 +1,8 @@
 # codemode-workers
 
-Toolkit for building Code Mode MCP servers on Cloudflare Workers: expose an API with thousands of endpoints to an agent as **two tools** (`search` + `execute`) instead of thousands of tool schemas. The catalog stays server side; the agent writes JavaScript that runs in disposable dynamic-worker isolates. Same pattern as [cloudflare-mcp](https://github.com/cloudflare/cloudflare-mcp) (2,500 endpoints in ~1,100 tokens), packaged for any API.
+Expose any API to an LLM agent as two sandboxed MCP tools (search + execute) on Cloudflare Workers.
+
+Instead of registering thousands of tool schemas, you register **two tools** (`search` + `execute`). The catalog stays server side; the agent writes JavaScript that runs in disposable dynamic-worker isolates. Same pattern as [cloudflare-mcp](https://github.com/cloudflare/cloudflare-mcp) (2,500 endpoints in ~1,100 tokens), packaged for any API.
 
 ## How it works
 

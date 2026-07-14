@@ -1,7 +1,7 @@
 {
   "name": "codemode-workers",
   "version": "1.0.0",
-  "description": "Generic Code Mode MCP toolkit: expose huge API surfaces to agents as two tools (search + execute) running in Cloudflare dynamic Worker isolates",
+  "description": "Expose any API to an LLM agent as two sandboxed MCP tools (search + execute) on Cloudflare Workers.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
