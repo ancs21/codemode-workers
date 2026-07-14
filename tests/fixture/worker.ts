@@ -81,9 +81,7 @@ export default {
 		try {
 			const result = await runInIsolate(env.LOADER, {
 				code,
-				outbound: (exports as Record<string, (options: unknown) => unknown>).Gate?.({
-					props: { headers: { Authorization: `Bearer ${token}` } }
-				})
+				outbound: makeGateOutbound(token)
 			})
 			return Response.json({ result })
 		} catch (error) {
