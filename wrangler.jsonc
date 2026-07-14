@@ -4,5 +4,7 @@
 	"name": "mcp-codemode-test",
 	"main": "tests/fixture/worker.ts",
 	"compatibility_date": "2026-01-12",
-	"worker_loaders": [{ "binding": "LOADER" }]
+	"worker_loaders": [{ "binding": "LOADER" }],
+	// Lets wrangler/miniflare resolve the Gate entrypoint for `exports.Gate`.
+	"services": [{ "binding": "GATE_SELF", "service": "mcp-codemode-test", "entrypoint": "Gate" }]
 }
