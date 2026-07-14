@@ -1,0 +1,31 @@
+---
+title: Introduction
+description: Expose any API to an LLM agent as two sandboxed MCP tools (search + execute) on Cloudflare Workers.
+---
+
+# codemode-workers
+
+Instead of registering thousands of tool schemas, you register **two tools** (`search` + `execute`). The catalog stays server side; the agent writes JavaScript that runs in disposable dynamic-worker isolates. Same pattern as [cloudflare-mcp](https://github.com/cloudflare/mcp) (2,500 endpoints in ~1,100 tokens), packaged for any API.
+
+## Why
+
+One tool per endpoint dumps every schema into the model's context. Code mode keeps the spec on the server and sends the agent two tools, so the context cost stays flat no matter how big the API is. Measured against the Urantia Papers API (58 endpoints):
+
+| Approach                               | Tools | Tokens |
+| -------------------------------------- | ----- | ------ |
+| One tool per endpoint, full schemas    | 58    | 3,489  |
+| One tool per endpoint, minimal schemas | 58    | 1,747  |
+| Code mode                              | 2     | 184    |
+
+Run `bun run eval:tokens <specUrl>` to measure it for your own API. See [Evals](/docs/evals) for how the numbers are produced.
+
+## Where to go next
+
+- [Getting started](/docs/getting-started) — install, wire up a worker, and register the two tools.
+- [How it works](/docs/how-it-works) — the isolate + gate architecture behind `search` and `execute`.
+- [API reference](/docs/api-reference) — every export and its config shape.
+- [Security](/docs/security) — the sandbox invariants and the residual risks to know before you ship.
+
+## Requirements
+
+Cloudflare Workers with the Worker Loader binding (`worker_loaders`), currently in beta. Bun 1.3+, TypeScript 7.

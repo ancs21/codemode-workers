@@ -1,0 +1,44 @@
+---
+title: How it works
+description: The isolate + gate architecture behind the search and execute tools.
+---
+
+# How it works
+
+Code mode replaces one-tool-per-endpoint with two tools that run agent-written JavaScript in disposable isolates. The API catalog stays on the server; the agent only ever sees `search` and `execute`.
+
+## search
+
+Agent code runs in an isolate with your catalog baked in as a global (default name `spec`, configurable via `catalog.globalName`). The isolate has **no network access** — its `globalOutbound` is `null`. This is where the agent explores the spec and picks an endpoint, entirely offline.
+
+## execute
+
+Agent code calls `api.request({ method, path, query, body })`. The isolate's only network exit is the **gate** — a `WorkerEntrypoint` you create with `createGate` and re-export from your worker. The gate:
+
+- rejects every host that is not in `allowedHosts` (403 before the request leaves),
+- refuses to attach credentials over a non-`https` scheme,
+- injects credential headers from `props` (which live outside the sandbox), and
+- forwards with `redirect: "manual"` so a 3xx from the allowed host never carries the credential to another host.
+
+So agent code can make the request, but can neither read the secret nor reach anywhere else.
+
+## Fresh isolate per call
+
+Every `search` and `execute` call gets a fresh isolate with a random id. The agent's code is compiled into the module source, **never `eval`'d**, and no state crosses calls. Results are clamped to a token budget (`truncateResponse`) before returning to the model.
+
+## The request path
+
+```
+agent → execute tool → isolate (compiled code, api.request only)
+                          │
+                          ▼
+                    Gate (WorkerEntrypoint)
+                    ├─ host in allowedHosts?      no → 403
+                    ├─ https scheme?               no → 403
+                    ├─ inject props.headers (auth)
+                    └─ fetch(..., redirect: "manual") → your API
+```
+
+The `api.request` helper is compiled into every `execute` isolate. It prepends `api.baseUrl` to the path, sets `Content-Type: application/json` for JSON bodies (unless you pass `rawBody`), and throws `API error <status>: <body>` on a non-2xx response so the agent can see what failed.
+
+For the credential-handling guarantees and the risks they do **not** cover, see [Security](/docs/security).

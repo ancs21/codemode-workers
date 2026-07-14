@@ -1,0 +1,96 @@
+---
+title: Getting started
+description: Install codemode-workers, wire up a Cloudflare Worker, and register the search + execute tools.
+---
+
+# Getting started
+
+## Install
+
+<CodeGroup>
+
+```bash bun
+bun add codemode-workers
+```
+
+```bash npm
+npm install codemode-workers
+```
+
+</CodeGroup>
+
+Bring your own MCP server SDK (e.g. `@modelcontextprotocol/server`). This library is transport-agnostic and only needs an object with a `registerTool(name, config, cb)` method.
+
+## Configure the worker bindings
+
+Code mode needs two bindings: the Worker Loader that runs agent code in fresh isolates, and a service binding back to the same worker for the egress gate.
+
+```jsonc
+// wrangler.jsonc
+{
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "services": [
+    {
+      "binding": "GATE_SELF",
+      "service": "<your-worker>",
+      "entrypoint": "Gate",
+    },
+  ],
+}
+```
+
+The Worker Loader binding is currently in beta.
+
+## Register the tools
+
+```ts
+import { exports } from "cloudflare:workers";
+import {
+  createGate,
+  processSpec,
+  registerCodemodeTools,
+} from "codemode-workers";
+
+// Re-export the gate as a WorkerEntrypoint so the service binding can reach it.
+export const Gate = createGate({ allowedHosts: ["api.example.com"] });
+
+registerCodemodeTools(server, {
+  loader: env.LOADER,
+  catalog: {
+    get: async () => processSpec(await (await fetch(SPEC_URL)).json()),
+    description: "Your API catalog: spec.paths[path][method].",
+  },
+  api: {
+    baseUrl: "https://api.example.com/v1",
+    outbound: () =>
+      exports.Gate({
+        props: { headers: { Authorization: `Bearer ${env.API_TOKEN}` } },
+      }),
+  },
+});
+```
+
+`server` is anything with `registerTool(name, config, cb)`, which the official MCP SDK provides. `registerCodemodeTools` adds `search` and `execute`; you serve them over MCP with your SDK's transport.
+
+The credential (`env.API_TOKEN`) is passed to the gate through `props`, never into the isolate. Agent code can call `api.request(...)` but cannot read the token or reach any host other than the ones in `allowedHosts`. See [Security](/docs/security) for the full model.
+
+## What the agent sees
+
+Once registered, the agent has two tools:
+
+- **`search`** — runs its JavaScript in an isolate with your processed catalog available as a global (default name `spec`). No network access. Used to find the right endpoint.
+- **`execute`** — runs its JavaScript in an isolate whose only network exit is `api.request({ method, path, query, body })`, routed through the gate.
+
+```js
+// Example agent code for execute:
+const { status, data } = await api.request({
+  method: "GET",
+  path: "/pets/findByStatus",
+  query: { status: "available" },
+});
+return data;
+```
+
+## Full example
+
+See [`examples/petstore/worker.ts`](https://github.com/ancs21/codemode-workers/blob/main/examples/petstore/worker.ts) for a complete worker wired against the Swagger Petstore API, and [`examples/urantia`](https://github.com/ancs21/codemode-workers/tree/main/examples/urantia) for one with its own `wrangler.jsonc`.

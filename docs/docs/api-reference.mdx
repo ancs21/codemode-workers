@@ -1,0 +1,96 @@
+---
+title: API reference
+description: Every codemode-workers export and its configuration shape.
+---
+
+# API reference
+
+## Exports
+
+| Export                                                       | What it does                                                    |
+| ------------------------------------------------------------ | --------------------------------------------------------------- |
+| `registerCodemodeTools(server, config)`                      | Registers `search` + `execute` on an MCP server                 |
+| `createGate({ allowedHosts, fetcher? })`                     | Egress gate class: host allowlist + header injection from props |
+| `runInIsolate(loader, { code, globals, prelude, outbound })` | Run agent code in a fresh isolate (network off by default)      |
+| `processSpec(spec)` / `resolveRefs(value, spec)`             | Reduce an OpenAPI spec to a searchable catalog, refs inlined    |
+| `buildModuleSource(options)`                                 | The module-text builder underneath `runInIsolate`               |
+| `truncateResponse(value, { maxTokens })`                     | Token-budget clamp used on all tool results                     |
+| `compareFootprint(tools, spec)`                              | Weigh code-mode tokens against the per-endpoint baseline        |
+
+## `registerCodemodeTools(server, config)`
+
+`server` is any object exposing `registerTool(name, config, cb)` (the official MCP SDK provides this). `config` is a `CodemodeConfig`:
+
+```ts
+interface CodemodeConfig {
+  loader: WorkerLoaderLike; // the env.LOADER worker-loader binding
+  catalog: {
+    /** The catalog object baked into every search isolate. */
+    get: () => unknown | Promise<unknown>;
+    /** Global name the code sees. Default: 'spec'. */
+    globalName?: string;
+    /** Appended to the search tool description (shape docs, examples). */
+    description?: string;
+  };
+  api: {
+    /** Base URL prepended to api.request paths, e.g. https://api.example.com/v4 */
+    baseUrl: string;
+    /** Factory for the gate outbound, called per execute invocation. */
+    outbound: () => unknown;
+    /** Appended to the execute tool description. */
+    description?: string;
+    /** Extra values baked into execute isolates (e.g. { accountId }). */
+    globals?: Record<string, unknown>;
+  };
+  maxResponseTokens?: number;
+  /** Bound each tool call's isolate execution (ms). Default: no timeout. */
+  timeoutMs?: number;
+}
+```
+
+## `createGate(config)`
+
+Returns a `WorkerEntrypoint` class. Re-export it from your worker entry module (`export const Gate = createGate(...)`) and pass it as the `outbound` for `execute` isolates via `exports.Gate({ props })`.
+
+```ts
+interface GateConfig {
+  /** Exact hostnames the isolate may reach. Everything else gets a 403. */
+  allowedHosts: string[];
+  /** Outbound transport. Defaults to global fetch; injectable for tests/retry. */
+  fetcher?: (request: Request) => Promise<Response>;
+}
+
+interface GateProps {
+  /** Headers injected into every outbound request (e.g. Authorization). */
+  headers?: Record<string, string>;
+}
+```
+
+Secrets live in `GateProps.headers`, passed per call — never inside the isolate.
+
+Also exported: `checkHost(url, allowedHosts)` and `isSecureScheme(url)`, the two predicates the gate applies.
+
+## `runInIsolate(loader, options)`
+
+```ts
+interface RunOptions extends ModuleSourceOptions {
+  /** Service-binding entrypoint (e.g. exports.MyGate({ props })). */
+  outbound?: unknown; // default: null → no network
+  /** Execution timeout in ms. Default: no timeout. */
+  timeoutMs?: number;
+}
+```
+
+`ModuleSourceOptions` (from `buildModuleSource`) supplies `code`, `globals`, and `prelude`. `withTimeout(promise, ms)` is exported for wrapping your own promises with the same timeout behavior.
+
+## `processSpec(spec)` / `resolveRefs(value, spec)`
+
+`processSpec` reduces a raw OpenAPI document to a searchable `ProcessedSpec` catalog with `$ref`s inlined. `resolveRefs` is the ref-inlining primitive it uses. Feed the result to `catalog.get`.
+
+## `truncateResponse(value, { maxTokens })`
+
+Serializes a value and clamps it to a token budget. Applied to every tool result; `maxResponseTokens` in `CodemodeConfig` sets the budget.
+
+## Evals
+
+`compareFootprint`, `estimateTokens`, `toolSetTokens`, and `nativeToolsFromSpec` (plus the `TokenCounter`, `ToolShape`, and `FootprintComparison` types) measure the token footprint. See [Evals](/docs/evals).
