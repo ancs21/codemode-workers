@@ -5,8 +5,10 @@
  * pool runs tests in the same isolate, so module state is shared.
  */
 import { exports } from 'cloudflare:workers'
+import { McpServer, WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server'
 import { createGate } from '../../src/gate'
 import { runInIsolate, type WorkerLoaderLike } from '../../src/isolate'
+import { registerCodemodeTools, type ToolRegistrar } from '../../src/tools'
 
 export const gateCalls: Array<{
 	url: string
@@ -34,9 +36,45 @@ export function makeGateOutbound(token: string): unknown {
 	})
 }
 
+/** Build an MCP server wired to the fake gate + a static catalog (deterministic). */
+function buildMcpServer(env: { LOADER: WorkerLoaderLike }): McpServer {
+	const server = new McpServer({ name: 'test-codemode', version: '0.0.0' })
+	registerCodemodeTools(server as unknown as ToolRegistrar, {
+		loader: env.LOADER,
+		catalog: {
+			get: () => ({ paths: { '/v1/me': { get: { summary: 'Who am I' } } } }),
+			description: 'Test catalog'
+		},
+		api: {
+			baseUrl: 'https://api.fake.test',
+			outbound: () => makeGateOutbound('mcp-token'),
+			description: 'Fake API'
+		}
+	})
+	return server
+}
+
 export default {
-	async fetch(request: Request, env: { LOADER: WorkerLoaderLike }): Promise<Response> {
-		if (new URL(request.url).pathname !== '/run') {
+	async fetch(
+		request: Request,
+		env: { LOADER: WorkerLoaderLike },
+		ctx: ExecutionContext
+	): Promise<Response> {
+		const path = new URL(request.url).pathname
+
+		if (path === '/mcp') {
+			const server = buildMcpServer(env)
+			const transport = new WebStandardStreamableHTTPServerTransport({
+				sessionIdGenerator: undefined,
+				enableJsonResponse: true
+			})
+			await server.connect(transport)
+			const response = await transport.handleRequest(request)
+			ctx.waitUntil(transport.close())
+			return response
+		}
+
+		if (path !== '/run') {
 			return new Response('mcp-codemode test fixture')
 		}
 		const { code, token } = (await request.json()) as { code: string; token: string }
