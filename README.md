@@ -2,6 +2,7 @@
 
 Expose any API to an LLM agent as two sandboxed MCP tools (search + execute) on Cloudflare Workers.
 
+[![CI](https://github.com/ancs21/codemode-workers/actions/workflows/ci.yml/badge.svg)](https://github.com/ancs21/codemode-workers/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/codemode-workers)](https://www.npmjs.com/package/codemode-workers)
 [![npm downloads](https://img.shields.io/npm/dm/codemode-workers)](https://www.npmjs.com/package/codemode-workers)
 [![types included](https://img.shields.io/npm/types/codemode-workers)](https://www.npmjs.com/package/codemode-workers)
