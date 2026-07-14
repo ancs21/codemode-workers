@@ -63,7 +63,7 @@
     "type": "git",
     "url": "git+https://github.com/ancs21/codemode-workers.git"
   },
-  "homepage": "https://github.com/ancs21/codemode-workers#readme",
+  "homepage": "https://codemode-workers.pages.dev",
   "bugs": {
     "url": "https://github.com/ancs21/codemode-workers/issues"
   }

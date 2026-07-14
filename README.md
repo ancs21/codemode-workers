@@ -6,7 +6,10 @@ Expose any API to an LLM agent as two sandboxed MCP tools (search + execute) on 
 [![npm version](https://img.shields.io/npm/v/codemode-workers)](https://www.npmjs.com/package/codemode-workers)
 [![npm downloads](https://img.shields.io/npm/dm/codemode-workers)](https://www.npmjs.com/package/codemode-workers)
 [![types included](https://img.shields.io/npm/types/codemode-workers)](https://www.npmjs.com/package/codemode-workers)
+[![docs](https://img.shields.io/badge/docs-codemode--workers.pages.dev-0b7285)](https://codemode-workers.pages.dev)
 [![license MIT](https://img.shields.io/npm/l/codemode-workers)](./LICENSE)
+
+Full documentation: **[codemode-workers.pages.dev](https://codemode-workers.pages.dev)**.
 
 Instead of registering thousands of tool schemas, you register **two tools** (`search` + `execute`). The catalog stays server side; the agent writes JavaScript that runs in disposable dynamic-worker isolates. Same pattern as [cloudflare-mcp](https://github.com/cloudflare/mcp) (2,500 endpoints in ~1,100 tokens), packaged for any API.
 
