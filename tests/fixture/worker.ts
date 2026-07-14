@@ -8,13 +8,21 @@ import { exports } from 'cloudflare:workers'
 import { createGate } from '../../src/gate'
 import { runInIsolate, type WorkerLoaderLike } from '../../src/isolate'
 
-export const gateCalls: Array<{ url: string; authorization: string | null }> = []
+export const gateCalls: Array<{
+	url: string
+	authorization: string | null
+	redirect: Request['redirect']
+}> = []
 
 export const Gate = createGate({
 	allowedHosts: ['api.fake.test'],
 	// Fake upstream: records what crossed the gate and echoes the auth header.
 	fetcher: async (request) => {
-		gateCalls.push({ url: request.url, authorization: request.headers.get('Authorization') })
+		gateCalls.push({
+			url: request.url,
+			authorization: request.headers.get('Authorization'),
+			redirect: request.redirect
+		})
 		return Response.json({ ok: true, auth: request.headers.get('Authorization') })
 	}
 })

@@ -40,6 +40,13 @@ describe('gate (real isolate egress)', () => {
 		expect((result as { auth: string }).auth).toBe('Bearer secret-token-1')
 	})
 
+	it('does not follow redirects across the gate (forwards with redirect: manual)', async () => {
+		await runGated('async () => (await fetch("https://api.fake.test/redir")).status', 'redir-token')
+		// A 3xx therefore returns un-followed to the isolate; the isolate cannot
+		// follow it without re-entering the gate, which re-runs the host check.
+		expect(gateCalls[0]?.redirect).toBe('manual')
+	})
+
 	it('rejects non-allowlisted hosts with 403 before any upstream call', async () => {
 		const { result } = await runGated(
 			'async () => (await fetch("https://evil.test/steal")).status',

@@ -47,7 +47,13 @@ export function createGate(config: GateConfig): GateClass {
 			for (const [name, value] of Object.entries(props?.headers ?? {})) {
 				headers.set(name, value)
 			}
-			return fetcher(new Request(request, { headers }))
+			// redirect: 'manual' so a 3xx from the allowed host is never auto-followed
+			// with the injected credentials attached. workerd already delivers
+			// globalOutbound subrequests as 'manual', but pin it here so the property
+			// lives in our code rather than depending on a platform default. A 3xx
+			// returns to the isolate, which cannot follow it without re-entering the
+			// gate (re-running checkHost).
+			return fetcher(new Request(request, { headers, redirect: 'manual' }))
 		}
 	}
 	return Gate as unknown as GateClass
