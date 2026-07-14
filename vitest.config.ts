@@ -6,5 +6,11 @@ export default defineConfig({
   test: {
     globals: true,
     include: ['tests/**/*.test.ts'],
+    coverage: {
+      // The workers pool runs in workerd, so v8 coverage is unavailable; use istanbul.
+      provider: 'istanbul',
+      include: ['src/**/*.ts'],
+      reporter: ['text-summary', 'lcov', 'json-summary'],
+    },
   },
 })
