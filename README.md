@@ -4,9 +4,9 @@ Toolkit for building Code Mode MCP servers on Cloudflare Workers: expose an API 
 
 ## How it works
 
-- `search`: agent code runs in an isolate with your catalog baked in as a global. No network access at all.
+- `search`: agent code runs in an isolate with your catalog baked in as a global. The isolate has no network access.
 - `execute`: agent code calls `api.request({ method, path, query, body })`. The isolate's only network exit is a gate you re-export as a WorkerEntrypoint: it rejects every host but yours and injects credentials from props, so agent code can neither read the secret nor reach anywhere else.
-- Every call gets a fresh isolate (random id, code compiled into the module source — no `eval`). Results are clamped to a token budget.
+- Every call gets a fresh isolate (random id, code compiled into the module source, not `eval`'d). Results are clamped to a token budget.
 
 ## Quickstart
 
@@ -56,7 +56,7 @@ registerCodemodeTools(server, {
 })
 ```
 
-`server` is anything with `registerTool(name, config, cb)` — the official MCP SDK qualifies. See `examples/petstore/worker.ts` for a full worker.
+`server` is anything with `registerTool(name, config, cb)`, which the official MCP SDK provides. See `examples/petstore/worker.ts` for a full worker.
 
 ## API
 
@@ -87,7 +87,7 @@ Invariants, all integration-tested against real isolates:
 
 ## Evals
 
-The whole point of code mode is token efficiency, so the library ships a way to measure it. `compareFootprint` weighs the code-mode tool set against the one-tool-per-endpoint baseline generated from the same spec:
+Code mode exists for token efficiency, so the library ships a way to measure it. `compareFootprint` weighs the code-mode tool set against the one-tool-per-endpoint baseline generated from the same spec:
 
 ```ts
 import { compareFootprint, processSpec } from 'codemode-workers'
@@ -110,7 +110,7 @@ Native, minimal schemas: 1,747 tokens   (9x more)
 
 Token counts default to a dependency-free `chars/4` estimate. That is accurate enough for the ratio and for a CI regression guard (see `tests/eval-regression.test.ts`, which fails if a description bloats or the ratio collapses), but not for a headline absolute number: pass Anthropic's `count_tokens` (or `js-tiktoken`) as the `count` argument to get the exact model-facing figure.
 
-This is the deterministic, no-API-key half of evals. The other half — does a real model actually find the right endpoint through `search` — needs a model in the loop, your API keys, and money, so it is left to you. The clean way to score it is not an LLM judge: run the model's generated code through the same gate spy the tests use and assert the resulting request, exactly like `tests/gate.test.ts` and `tests/tools.test.ts` already do deterministically.
+This is the deterministic, no-API-key half of evals. The other half, whether a real model actually finds the right endpoint through `search`, needs a model in the loop, your API keys, and money, so it is left to you. The clean way to score it is not an LLM judge: run the model's generated code through the same gate spy the tests use and assert the resulting request, exactly like `tests/gate.test.ts` and `tests/tools.test.ts` already do deterministically.
 
 ## Requirements
 
