@@ -1,0 +1,192 @@
+---
+title: "Example: Petstore server"
+description: A complete, runnable Code Mode MCP server for the Swagger Petstore API, from wiring to a live tools/call.
+---
+
+# Example: Petstore server
+
+A complete worker that exposes the [Swagger Petstore](https://petstore3.swagger.io) API to an agent as `search` + `execute`, served over MCP. Full source: [`examples/petstore`](https://github.com/ancs21/codemode-workers/tree/main/examples/petstore).
+
+## The worker
+
+```ts
+import { exports } from "cloudflare:workers";
+import {
+  McpServer,
+  WebStandardStreamableHTTPServerTransport,
+} from "@modelcontextprotocol/server";
+import {
+  createGate,
+  processSpec,
+  registerCodemodeTools,
+  type ToolRegistrar,
+  type WorkerLoaderLike,
+} from "codemode-workers";
+
+interface Env {
+  LOADER: WorkerLoaderLike;
+  PETSTORE_API_KEY?: string; // optional; injected as the api_key header when set
+}
+
+const API_BASE = "https://petstore3.swagger.io/api/v3";
+const SPEC_URL = "https://petstore3.swagger.io/api/v3/openapi.json";
+
+export const Gate = createGate({ allowedHosts: [new URL(API_BASE).hostname] });
+
+// Fetch + reduce the spec once per isolate, not on every search call.
+let catalog: Promise<unknown> | undefined;
+function getCatalog(): Promise<unknown> {
+  return (catalog ??= fetchCatalog());
+}
+async function fetchCatalog(): Promise<unknown> {
+  return processSpec(
+    (await (await fetch(SPEC_URL)).json()) as Record<string, unknown>,
+  );
+}
+
+function buildServer(env: Env): McpServer {
+  const server = new McpServer({ name: "petstore-codemode", version: "0.1.0" });
+  registerCodemodeTools(server as unknown as ToolRegistrar, {
+    loader: env.LOADER,
+    catalog: {
+      get: getCatalog,
+      description: "Swagger Petstore OpenAPI catalog: spec.paths[path][method].",
+    },
+    api: {
+      baseUrl: API_BASE,
+      outbound: () =>
+        (exports as Record<string, (options: unknown) => unknown>).Gate?.({
+          props: env.PETSTORE_API_KEY
+            ? { headers: { api_key: env.PETSTORE_API_KEY } }
+            : {},
+        }),
+      description: "Swagger Petstore v3.",
+    },
+    timeoutMs: 10_000,
+  });
+  return server;
+}
+
+export default {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
+    if (new URL(request.url).pathname !== "/mcp") {
+      return new Response("POST JSON-RPC to /mcp.", { status: 404 });
+    }
+    // Stateless Streamable HTTP: a fresh server + transport per request.
+    const server = buildServer(env);
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+    await server.connect(transport);
+    const response = await transport.handleRequest(request);
+    ctx.waitUntil(transport.close());
+    return response;
+  },
+};
+```
+
+A few things worth noting:
+
+- `buildServer` runs per request and the transport is stateless (`sessionIdGenerator: undefined`), so there is nothing to keep alive between calls.
+- The catalog is fetched and reduced once per isolate, then reused.
+- `api_key` is injected only when the secret is set, so the public read endpoints work with no key at all.
+- `timeoutMs` bounds how long agent code can run.
+- The `/mcp` endpoint has no auth. That is fine for the public Petstore, but put auth in front before you set a real key or deploy publicly.
+
+## wrangler.jsonc
+
+```jsonc
+{
+  "name": "petstore-codemode",
+  "main": "worker.ts",
+  "compatibility_date": "2026-01-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "worker_loaders": [{ "binding": "LOADER" }],
+  "services": [
+    {
+      "binding": "GATE_SELF",
+      "service": "petstore-codemode",
+      "entrypoint": "Gate",
+    },
+  ],
+}
+```
+
+`LOADER` runs agent code in fresh isolates. The `GATE_SELF` service binding, pointing back at this same worker, is what lets `exports.Gate` resolve as the execute isolate's outbound.
+
+## Run it
+
+```bash
+cd examples/petstore
+wrangler dev
+```
+
+List the tools with the MCP Inspector:
+
+```bash
+npx @modelcontextprotocol/inspector --cli http://localhost:8787/mcp --method tools/list
+# -> search, execute
+```
+
+## A live session
+
+First the agent uses `search` to find an endpoint. This runs over the baked-in catalog with no network:
+
+```js
+// tools/call search
+async () =>
+  Object.entries(spec.paths)
+    .flatMap(([p, m]) =>
+      Object.keys(m)
+        .filter((x) => x === "get")
+        .map((x) => x.toUpperCase() + " " + p),
+    )
+    .slice(0, 6);
+```
+
+```json
+[
+  "GET /pet/findByStatus",
+  "GET /pet/findByTags",
+  "GET /pet/{petId}",
+  "GET /store/inventory",
+  "GET /store/order/{orderId}",
+  "GET /user/login"
+]
+```
+
+Then `execute` calls the live API through the gate, which injects the key (if any) and allows only the Petstore host:
+
+```js
+// tools/call execute
+async () => {
+  const r = await api.request({
+    method: "GET",
+    path: "/pet/findByStatus",
+    query: { status: "available" },
+  });
+  return { status: r.status, count: r.data.length };
+};
+```
+
+```json
+{ "status": 200, "count": 0 }
+```
+
+The agent never saw a token and could not have reached any host other than `petstore3.swagger.io`.
+
+## Adapt it to your API
+
+Change four things:
+
+1. `API_BASE` and `SPEC_URL` to your API and its OpenAPI spec.
+2. `allowedHosts` in `createGate` to your API's host.
+3. The `props.headers` in `outbound` to your auth scheme (`Authorization: Bearer ...`, `api_key`, and so on).
+4. The catalog `description` to hint the agent at your spec's shape.
+
+The sandboxing, the gate, and the transport stay the same. See [`examples/urantia`](https://github.com/ancs21/codemode-workers/tree/main/examples/urantia) for a second worker built the same way.

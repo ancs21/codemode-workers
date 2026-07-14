@@ -4,6 +4,7 @@ import { defineMeta } from "blume";
 export default defineMeta({
   pages: [
     "getting-started",
+    "example-petstore",
     "how-it-works",
     "api-reference",
     "security",
