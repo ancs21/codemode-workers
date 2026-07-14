@@ -1,4 +1,4 @@
-# mcp-codemode
+# codemode-workers
 
 Toolkit for building Code Mode MCP servers on Cloudflare Workers: expose an API with thousands of endpoints to an agent as **two tools** (`search` + `execute`) instead of thousands of tool schemas. The catalog stays server side; the agent writes JavaScript that runs in disposable dynamic-worker isolates. Same pattern as [cloudflare-mcp](https://github.com/cloudflare/cloudflare-mcp) (2,500 endpoints in ~1,100 tokens), packaged for any API.
 
@@ -10,6 +10,12 @@ Toolkit for building Code Mode MCP servers on Cloudflare Workers: expose an API 
 
 ## Quickstart
 
+```
+npm install codemode-workers          # or: bun add codemode-workers
+```
+
+Bring your own MCP server SDK (e.g. `@modelcontextprotocol/server`); this library is transport-agnostic and only needs a `registerTool(name, config, cb)`.
+
 ```jsonc
 // wrangler.jsonc
 {
@@ -20,7 +26,7 @@ Toolkit for building Code Mode MCP servers on Cloudflare Workers: expose an API 
 
 ```ts
 import { exports } from 'cloudflare:workers'
-import { createGate, processSpec, registerCodemodeTools } from 'mcp-codemode'
+import { createGate, processSpec, registerCodemodeTools } from 'codemode-workers'
 
 export const Gate = createGate({ allowedHosts: ['api.example.com'] })
 
@@ -71,7 +77,7 @@ Invariants, all integration-tested against real isolates:
 The whole point of code mode is token efficiency, so the library ships a way to measure it. `compareFootprint` weighs the code-mode tool set against the one-tool-per-endpoint baseline generated from the same spec:
 
 ```ts
-import { compareFootprint, processSpec } from 'mcp-codemode'
+import { compareFootprint, processSpec } from 'codemode-workers'
 
 const spec = processSpec(await (await fetch(SPEC_URL)).json())
 const { codeModeTokens, nativeTokens, endpointCount, ratio } = compareFootprint(myTools, spec)
