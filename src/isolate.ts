@@ -34,9 +34,32 @@ export interface RunOptions extends ModuleSourceOptions {
 	compatibilityDate?: string
 	/** Prefix for the throwaway worker id, for log readability. */
 	idPrefix?: string
+	/**
+	 * Reject the call if evaluate() has not settled within this many ms. Default:
+	 * no timeout (the platform's CPU limit is the only backstop). Set this to bound
+	 * agent code that never settles (e.g. `new Promise(() => {})`).
+	 */
+	timeoutMs?: number
 }
 
 const DEFAULT_COMPATIBILITY_DATE = '2026-01-12'
+
+/** Reject with a timeout error if `promise` has not settled within `ms`. */
+export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error(`Execution timed out after ${ms}ms`)), ms)
+		promise.then(
+			(value) => {
+				clearTimeout(timer)
+				resolve(value)
+			},
+			(error: unknown) => {
+				clearTimeout(timer)
+				reject(error instanceof Error ? error : new Error(String(error)))
+			}
+		)
+	})
+}
 
 /**
  * Run agent code in a fresh dynamic-worker isolate and return its result.
@@ -49,6 +72,7 @@ export async function runInIsolate(loader: WorkerLoaderLike, options: RunOptions
 		outbound = null,
 		compatibilityDate = DEFAULT_COMPATIBILITY_DATE,
 		idPrefix = 'codemode',
+		timeoutMs,
 		...sourceOptions
 	} = options
 
@@ -60,7 +84,8 @@ export async function runInIsolate(loader: WorkerLoaderLike, options: RunOptions
 	}))
 
 	const entrypoint = worker.getEntrypoint() as IsolateEntrypoint
-	const response = await entrypoint.evaluate()
+	const evaluation = entrypoint.evaluate()
+	const response = timeoutMs === undefined ? await evaluation : await withTimeout(evaluation, timeoutMs)
 
 	if (response.err) {
 		throw new Error(response.err)

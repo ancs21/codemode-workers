@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { runInIsolate } from '../src/isolate'
+import { runInIsolate, withTimeout } from '../src/isolate'
 import { LOADER } from './helpers/env'
 
 describe('runInIsolate (real Worker Loader)', () => {
@@ -34,5 +34,33 @@ describe('runInIsolate (real Worker Loader)', () => {
 			prelude: 'const double = (n) => n * 2;'
 		})
 		expect(result).toBe(42)
+	})
+
+	it('honors timeoutMs for code that runs longer than the budget', async () => {
+		await expect(
+			runInIsolate(LOADER, {
+				code: 'async () => { await new Promise((r) => setTimeout(r, 5000)); return 1 }',
+				timeoutMs: 100
+			})
+		).rejects.toThrow(/timed out/i)
+	})
+
+	it('does not time out fast code when a timeout is set', async () => {
+		const result = await runInIsolate(LOADER, { code: 'async () => 7', timeoutMs: 1000 })
+		expect(result).toBe(7)
+	})
+})
+
+describe('withTimeout', () => {
+	it('rejects a promise that does not settle in time', async () => {
+		await expect(withTimeout(new Promise(() => {}), 50)).rejects.toThrow(/timed out after 50ms/)
+	})
+
+	it('resolves a promise that settles in time', async () => {
+		await expect(withTimeout(Promise.resolve(42), 1000)).resolves.toBe(42)
+	})
+
+	it('propagates the underlying rejection unchanged', async () => {
+		await expect(withTimeout(Promise.reject(new Error('boom')), 1000)).rejects.toThrow('boom')
 	})
 })

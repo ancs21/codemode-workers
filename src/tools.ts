@@ -35,6 +35,8 @@ export interface CodemodeConfig {
 		globals?: Record<string, unknown>
 	}
 	maxResponseTokens?: number
+	/** Bound each tool call's isolate execution (ms). Default: no timeout. */
+	timeoutMs?: number
 }
 
 /** The api.request() helper compiled into every execute isolate. */
@@ -93,7 +95,7 @@ async function runTool(run: () => Promise<unknown>, maxTokens?: number) {
  * credential-injecting gate).
  */
 export function registerCodemodeTools(server: ToolRegistrar, config: CodemodeConfig): void {
-	const { loader, catalog, api, maxResponseTokens } = config
+	const { loader, catalog, api, maxResponseTokens, timeoutMs } = config
 	const globalName = catalog.globalName ?? 'spec'
 
 	server.registerTool(
@@ -110,7 +112,8 @@ export function registerCodemodeTools(server: ToolRegistrar, config: CodemodeCon
 					runInIsolate(loader, {
 						code,
 						globals: { [globalName]: await catalog.get() },
-						idPrefix: 'codemode-search'
+						idPrefix: 'codemode-search',
+						timeoutMs
 					}),
 				maxResponseTokens
 			)
@@ -132,7 +135,8 @@ export function registerCodemodeTools(server: ToolRegistrar, config: CodemodeCon
 						prelude: apiPrelude(api.baseUrl),
 						globals: api.globals,
 						outbound: api.outbound(),
-						idPrefix: 'codemode-execute'
+						idPrefix: 'codemode-execute',
+						timeoutMs
 					}),
 				maxResponseTokens
 			)
