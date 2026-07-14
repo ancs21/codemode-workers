@@ -1,16 +1,20 @@
 /**
- * Example: a Code Mode MCP worker for the Urantia Papers API
- * (https://api.urantia.dev — an AI-agent-friendly API over 17,000+ paragraphs).
+ * Example: a runnable Code Mode MCP server for the Urantia Papers API
+ * (https://api.urantia.dev). Serves MCP over Streamable HTTP at POST /mcp.
  *
  * Most endpoints are public (/toc, /papers, /paragraphs/{ref}, POST /search,
- * POST /search/semantic, /entities/{id}); the /me/* endpoints need a bearer
- * token. So the gate injects Authorization only when URANTIA_TOKEN is set —
- * the public endpoints work with no secret at all.
+ * /entities/{id}); the /me/* endpoints need a bearer token, so the gate injects
+ * Authorization only when URANTIA_TOKEN is set.
  *
- * wrangler.jsonc (see alongside this file) needs the LOADER binding and a
- * self-service binding so `exports.Gate` resolves as a worker-loader outbound.
+ * Run it:
+ *   wrangler dev                       # from examples/urantia
+ *   npx @modelcontextprotocol/inspector --cli http://localhost:8787/mcp --method tools/list
+ *
+ * wrangler.jsonc (alongside) provides the LOADER binding and a self-service
+ * binding so `exports.Gate` resolves as the execute isolate's outbound.
  */
 import { exports } from 'cloudflare:workers'
+import { McpServer, WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server'
 import {
 	createGate,
 	processSpec,
@@ -31,50 +35,56 @@ const SPEC_URL = 'https://api.urantia.dev/openapi.json'
 export const Gate = createGate({ allowedHosts: [new URL(API_BASE).hostname] })
 
 // Fetch + reduce the spec once per isolate rather than on every search call.
-// ponytail: isolate-lifetime memo, no TTL. The Urantia spec is small and
-// static; add a timed cache (see cloudflare-mcp's isolate-cache) if the spec
+// ponytail: isolate-lifetime memo, no TTL. Add a timed cache if the spec
 // starts changing and you need same-day freshness.
 let catalog: Promise<unknown> | undefined
 function getCatalog(): Promise<unknown> {
 	return (catalog ??= fetchCatalog())
 }
 async function fetchCatalog(): Promise<unknown> {
-	const response = await fetch(SPEC_URL)
-	return processSpec((await response.json()) as Record<string, unknown>)
+	return processSpec((await (await fetch(SPEC_URL)).json()) as Record<string, unknown>)
+}
+
+function buildServer(env: Env): McpServer {
+	const server = new McpServer({ name: 'urantia-codemode', version: '0.1.0' })
+	// registerCodemodeTools only needs registerTool(name, config, cb); the real
+	// McpServer method is generically typed, so adapt it at this boundary.
+	registerCodemodeTools(server as unknown as ToolRegistrar, {
+		loader: env.LOADER,
+		catalog: {
+			get: getCatalog,
+			description:
+				'Urantia Papers API. spec.paths[path][method]. Public reads: /toc, /papers, /paragraphs/{ref}, POST /search, /entities/{id}. Auth-only: /me/*.'
+		},
+		api: {
+			baseUrl: API_BASE,
+			outbound: () =>
+				(exports as Record<string, (options: unknown) => unknown>).Gate?.({
+					props: env.URANTIA_TOKEN
+						? { headers: { Authorization: `Bearer ${env.URANTIA_TOKEN}` } }
+						: {}
+				}),
+			description: 'Urantia Papers API v1. Most endpoints are public; /me/* needs a bearer token.'
+		}
+	})
+	return server
 }
 
 export default {
-	async fetch(_request: Request, env: Env): Promise<Response> {
-		// Build your MCP server with the SDK of your choice (e.g. new McpServer(...)
-		// from @modelcontextprotocol/server), then hand it to registerCodemodeTools —
-		// it only needs registerTool().
-		const server: ToolRegistrar = {
-			registerTool() {
-				/* your MCP SDK provides this */
-			}
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		if (new URL(request.url).pathname !== '/mcp') {
+			return new Response('Urantia Code Mode MCP server. POST JSON-RPC to /mcp.', { status: 404 })
 		}
 
-		registerCodemodeTools(server, {
-			loader: env.LOADER,
-			catalog: {
-				get: getCatalog,
-				description:
-					'Urantia Papers API. spec.paths[path][method]. Public reads: /toc, /papers, /paragraphs/{ref}, POST /search, POST /search/semantic, /entities/{id}. Auth-only: /me/*.'
-			},
-			api: {
-				baseUrl: API_BASE,
-				outbound: () =>
-					(exports as Record<string, (options: unknown) => unknown>).Gate?.({
-						// Public endpoints need no auth; the token only matters for /me/*.
-						props: env.URANTIA_TOKEN
-							? { headers: { Authorization: `Bearer ${env.URANTIA_TOKEN}` } }
-							: {}
-					}),
-				description: 'Urantia Papers API v1. Most endpoints are public; /me/* needs a bearer token.'
-			}
+		// Stateless Streamable HTTP: a fresh server + transport per request.
+		const server = buildServer(env)
+		const transport = new WebStandardStreamableHTTPServerTransport({
+			sessionIdGenerator: undefined,
+			enableJsonResponse: true
 		})
-
-		// ...then serve MCP over HTTP with your SDK's transport.
-		return new Response('urantia codemode example', { status: 200 })
+		await server.connect(transport)
+		const response = await transport.handleRequest(request)
+		ctx.waitUntil(transport.close())
+		return response
 	}
 }

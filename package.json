@@ -28,6 +28,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.18",
     "@cloudflare/workers-types": "^4.20260625.1",
+    "@modelcontextprotocol/server": "2.0.0-beta.2",
     "typescript": "^7.0.2",
     "vitest": "^4.1.0",
     "wrangler": "4.105.0"
