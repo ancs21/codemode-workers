@@ -22,6 +22,16 @@ describe('resolveRefs', () => {
 		const resolved = resolveRefs({ $ref: '#/defs/Loop' }, spec) as { next: unknown }
 		expect(resolved.next).toEqual({ $circular: '#/defs/Loop' })
 	})
+
+	it('resolves the same ref repeatedly across siblings (not a cycle)', () => {
+		const spec = { defs: { Addr: { type: 'string' } } }
+		const resolved = resolveRefs(
+			{ from: { $ref: '#/defs/Addr' }, to: { $ref: '#/defs/Addr' } },
+			spec
+		)
+		// both siblings point at the same schema; neither is circular
+		expect(resolved).toEqual({ from: { type: 'string' }, to: { type: 'string' } })
+	})
 })
 
 describe('processSpec', () => {

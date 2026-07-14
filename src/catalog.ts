@@ -16,14 +16,21 @@ export function resolveRefs(
 
 	if (typeof record.$ref === 'string') {
 		const ref = record.$ref
+		// `seen` is the current resolution path, not a global visited set: a ref
+		// is circular only when it appears in its own ancestry. Add before
+		// descending and remove after, so the same ref reached via sibling
+		// branches resolves each time instead of being flagged circular.
 		if (seen.has(ref)) return { $circular: ref }
-		seen.add(ref)
 
 		let resolved: unknown = spec
 		for (const part of ref.replace('#/', '').split('/')) {
 			resolved = (resolved as Record<string, unknown> | undefined)?.[part]
 		}
-		return resolveRefs(resolved, spec, seen)
+
+		seen.add(ref)
+		const result = resolveRefs(resolved, spec, seen)
+		seen.delete(ref)
+		return result
 	}
 
 	const result: Record<string, unknown> = {}
