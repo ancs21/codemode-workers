@@ -1,0 +1,10 @@
+{
+	"name": "urantia-codemode",
+	"main": "worker.ts",
+	"compatibility_date": "2026-01-12",
+	"worker_loaders": [{ "binding": "LOADER" }],
+	// Lets the worker-loader resolve `exports.Gate` as the execute isolate's outbound.
+	"services": [{ "binding": "GATE_SELF", "service": "urantia-codemode", "entrypoint": "Gate" }]
+	// URANTIA_TOKEN (optional, for /me/* endpoints) is a secret:
+	//   wrangler secret put URANTIA_TOKEN
+}
