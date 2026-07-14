@@ -1,0 +1,18 @@
+{
+  "name": "petstore-codemode",
+  "main": "worker.ts",
+  "compatibility_date": "2026-01-12",
+  // The MCP SDK uses Node built-ins; enable the compat shims.
+  "compatibility_flags": ["nodejs_compat"],
+  "worker_loaders": [{ "binding": "LOADER" }],
+  // Lets the worker-loader resolve `exports.Gate` as the execute isolate's outbound.
+  "services": [
+    {
+      "binding": "GATE_SELF",
+      "service": "petstore-codemode",
+      "entrypoint": "Gate",
+    },
+  ],
+  // PETSTORE_API_KEY (optional) is a secret:
+  //   wrangler secret put PETSTORE_API_KEY
+}

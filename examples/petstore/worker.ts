@@ -1,16 +1,24 @@
 /**
- * Example: a Code Mode MCP worker for the Swagger Petstore API.
+ * Example: a runnable Code Mode MCP server for the Swagger Petstore API.
+ * Serves MCP over Streamable HTTP at POST /mcp.
  *
- * Wiring shown here:
- *  - Gate: re-exported entrypoint, allowlisting the API host, injecting the key
- *  - Catalog: OpenAPI spec fetched and processed on demand (cache as you like)
- *  - Tools: registerCodemodeTools onto your MCP SDK server
+ * Run it:
+ *   wrangler dev                       # from examples/petstore
+ *   npx @modelcontextprotocol/inspector --cli http://localhost:8787/mcp --method tools/list
  *
- * wrangler.jsonc needs:
- *  "worker_loaders": [{ "binding": "LOADER" }],
- *  "services": [{ "binding": "GATE_SELF", "service": "<worker-name>", "entrypoint": "Gate" }]
+ * wrangler.jsonc (alongside) provides the LOADER binding and a self-service
+ * binding so `exports.Gate` resolves as the execute isolate's outbound.
+ *
+ * SECURITY: this /mcp endpoint is UNAUTHENTICATED. Fine for the public demo
+ * Petstore. If you set PETSTORE_API_KEY or deploy publicly, put auth in front
+ * (OAuth or a bearer check) first, or any caller can spend your key and run
+ * unbounded code.
  */
 import { exports } from 'cloudflare:workers'
+import {
+  McpServer,
+  WebStandardStreamableHTTPServerTransport,
+} from '@modelcontextprotocol/server'
 import {
   createGate,
   processSpec,
@@ -21,7 +29,8 @@ import {
 
 interface Env {
   LOADER: WorkerLoaderLike
-  PETSTORE_API_KEY: string
+  /** Optional: injected as the `api_key` header when set. */
+  PETSTORE_API_KEY?: string
 }
 
 const API_BASE = 'https://petstore3.swagger.io/api/v3'
@@ -29,40 +38,63 @@ const SPEC_URL = 'https://petstore3.swagger.io/api/v3/openapi.json'
 
 export const Gate = createGate({ allowedHosts: [new URL(API_BASE).hostname] })
 
+// Fetch + reduce the spec once per isolate rather than on every search call.
+let catalog: Promise<unknown> | undefined
+function getCatalog(): Promise<unknown> {
+  return (catalog ??= fetchCatalog())
+}
 async function fetchCatalog(): Promise<unknown> {
-  const response = await fetch(SPEC_URL)
-  return processSpec((await response.json()) as Record<string, unknown>)
+  return processSpec(
+    (await (await fetch(SPEC_URL)).json()) as Record<string, unknown>,
+  )
+}
+
+function buildServer(env: Env): McpServer {
+  const server = new McpServer({ name: 'petstore-codemode', version: '0.1.0' })
+  registerCodemodeTools(server as unknown as ToolRegistrar, {
+    loader: env.LOADER,
+    catalog: {
+      get: getCatalog,
+      description:
+        'Swagger Petstore OpenAPI catalog: spec.paths[path][method].',
+    },
+    api: {
+      baseUrl: API_BASE,
+      outbound: () =>
+        (exports as Record<string, (options: unknown) => unknown>).Gate?.({
+          props: env.PETSTORE_API_KEY
+            ? { headers: { api_key: env.PETSTORE_API_KEY } }
+            : {},
+        }),
+      description: 'Swagger Petstore v3.',
+    },
+    timeoutMs: 10_000,
+  })
+  return server
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    // Build your MCP server with the SDK of your choice
-    // (e.g. new McpServer(...) from @modelcontextprotocol/server),
-    // then hand it to registerCodemodeTools — it only needs registerTool().
-    const server: ToolRegistrar = {
-      registerTool() {
-        /* your MCP SDK provides this */
-      },
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
+    if (new URL(request.url).pathname !== '/mcp') {
+      return new Response(
+        'Petstore Code Mode MCP server. POST JSON-RPC to /mcp.',
+        { status: 404 },
+      )
     }
 
-    registerCodemodeTools(server, {
-      loader: env.LOADER,
-      catalog: {
-        get: fetchCatalog,
-        description:
-          'Swagger Petstore OpenAPI catalog: spec.paths[path][method].',
-      },
-      api: {
-        baseUrl: API_BASE,
-        outbound: () =>
-          (exports as Record<string, (options: unknown) => unknown>).Gate?.({
-            props: { headers: { api_key: env.PETSTORE_API_KEY } },
-          }),
-        description: 'Swagger Petstore v3.',
-      },
+    // Stateless Streamable HTTP: a fresh server + transport per request.
+    const server = buildServer(env)
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
     })
-
-    // ...then serve MCP over HTTP with your SDK's transport.
-    return new Response('petstore codemode example', { status: 200 })
+    await server.connect(transport)
+    const response = await transport.handleRequest(request)
+    ctx.waitUntil(transport.close())
+    return response
   },
 }
