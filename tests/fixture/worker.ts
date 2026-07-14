@@ -19,6 +19,13 @@ export const Gate = createGate({
 	}
 })
 
+/** Gate outbound factory for tests: resolves exports.Gate in this module's scope. */
+export function makeGateOutbound(token: string): unknown {
+	return (exports as Record<string, (options: unknown) => unknown>).Gate?.({
+		props: { headers: { Authorization: `Bearer ${token}` } }
+	})
+}
+
 export default {
 	async fetch(request: Request, env: { LOADER: WorkerLoaderLike }): Promise<Response> {
 		if (new URL(request.url).pathname !== '/run') {
